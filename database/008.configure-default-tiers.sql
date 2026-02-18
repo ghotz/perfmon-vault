@@ -3,6 +3,15 @@ USE [$(DatabaseName)];
 GO
 
 -------------------------------------------------------------------------------
+-- Tier 0: counters to exclude
+-------------------------------------------------------------------------------
+INSERT INTO [vault].[CounterTier] ([Tier], [ObjectName], [CounterName], [InstanceName])
+VALUES
+    (0, '%:Deprecated Features', '%', '%')			  -- Always forget to remove from PAL template
+,   (0, '%:Buffer Manager',     'Extension%', '%')    -- Bugged extended pool counters, same as above but corrupts other memory counters
+;
+
+-------------------------------------------------------------------------------
 -- Tier 1: ~50-55 counters for resource trend analysis
 -------------------------------------------------------------------------------
 

@@ -28,7 +28,9 @@ CREATE TABLE			[vault].[CounterData_Tier1]
 
 ,	INDEX CCI_CounterData_Tier1
 	CLUSTERED COLUMNSTORE ORDER (CounterDateTime, CounterID)
-);
+)
+ON [ps_CounterData_Yearly] ([CounterDateTime]);
+;
 
 -------------------------------------------------------------------------------
 -- Counters Data Tier 2: warm — standard columnstore, remaining SQL/OS counters
@@ -56,7 +58,9 @@ CREATE TABLE			[vault].[CounterData_Tier2]
 
 ,	INDEX CCI_CounterData_Tier2
 	CLUSTERED COLUMNSTORE ORDER (CounterDateTime, CounterID)
-);
+)
+ON [ps_CounterData_Yearly] ([CounterDateTime]);
+;
 
 -------------------------------------------------------------------------------
 -- Counters Data Tier 3: cold — archive compression, everything else
@@ -84,7 +88,9 @@ CREATE TABLE			[vault].[CounterData_Tier3]
 
 ,	INDEX CCI_CounterData_Tier3
 	CLUSTERED COLUMNSTORE ORDER (CounterDateTime, CounterID)
-);
+)
+ON [ps_CounterData_Yearly] ([CounterDateTime]);
+;
 
 -------------------------------------------------------------------------------
 -- Counter details
@@ -152,6 +158,6 @@ CREATE TABLE [vault].[CounterTier]
 	PRIMARY KEY	([TierID])
 
 ,	CONSTRAINT	ck_CounterTier_Tier
-	CHECK		([Tier] IN (1, 2, 3))
+	CHECK		([Tier] IN (0, 1, 2, 3))
 );
 GO

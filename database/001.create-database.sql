@@ -2,6 +2,9 @@
 :setvar DataFilesDir "E:\SQLServer\MSSQL17.SQL2025\MSSQL\DATA"
 :setvar LogFilesDir "E:\SQLServer\MSSQL17.SQL2025\MSSQL\DATA"
 
+-------------------------------------------------------------------------------
+-- CReate default database
+-------------------------------------------------------------------------------
 USE [master];
 GO
 IF EXISTS (SELECT * FROM sys.databases WHERE [name] = N'$(DatabaseName)')
@@ -31,7 +34,7 @@ CREATE DATABASE [$(DatabaseName)]
     , SIZE = 64 , MAXSIZE = 2048GB , FILEGROWTH = 64MB
     );
 GO
-ALTER DATABASE [$(DatabaseName)] SET RECOVERY FULL;
+ALTER DATABASE [$(DatabaseName)] SET RECOVERY SIMPLE;
 ALTER DATABASE [$(DatabaseName)] SET TRUSTWORTHY OFF;
 ALTER DATABASE [$(DatabaseName)] SET PAGE_VERIFY CHECKSUM;
 ALTER DATABASE [$(DatabaseName)] SET TARGET_RECOVERY_TIME = 60 SECONDS;
