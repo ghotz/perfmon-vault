@@ -133,3 +133,15 @@ BEGIN
     
     SET @batch = @next;
 END
+
+
+--TRUNCATE TABLE [staging].[CounterData]
+--TRUNCATE TABLE [staging].[CounterDetails]
+--TRUNCATE TABLE [staging].[DisplayToID]
+
+SELECT   COUNT(*)
+FROM    [vault].[CounterDetails]
+WHERE   [ObjectName] like '%sql%'
+--GROUP BY [MachineName], [ObjectName], [CounterName]
+
+sele

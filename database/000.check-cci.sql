@@ -1,6 +1,10 @@
 select N'vault.CounterData' as db, min(total_rows) as total_rows_min, avg(total_rows) as total_rows_avg, max(total_rows) as total_rows_max, sum(total_rows) AS total_rows_sum, sum(case when total_rows = 1048576 then 1 else 0 end) as num_segments_with_max_rows, COUNT(*) as total_segments
 from sys.dm_db_column_store_row_group_physical_stats
 where object_id = OBJECT_ID('vault.CounterData')
+--select *
+--from sys.dm_db_column_store_row_group_physical_stats
+--where object_id = OBJECT_ID('vault.CounterData')
+
 --union all
 --select N'dbo.CounterData_Final2' as db, min(total_rows) as total_rows_min, avg(total_rows) as total_rows_avg, max(total_rows) as total_rows_max, sum(total_rows) AS total_rows_sum, sum(case when total_rows = 1048576 then 1 else 0 end) as num_segments_with_max_rows
 --from sys.dm_db_column_store_row_group_physical_stats
