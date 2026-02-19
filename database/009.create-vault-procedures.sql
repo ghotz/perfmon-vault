@@ -18,7 +18,6 @@ GO
 -------------------------------------------------------------------------------
 CREATE OR ALTER PROCEDURE [vault].[usp_LoadFromStaging]
 	@TruncateStaging bit = 0
-,	@LoadOnlyCounters bit = 0
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -51,6 +50,102 @@ BEGIN
 		RAISERROR('No new data to load. Exiting.', 0, 1) WITH NOWAIT;
 		RETURN 0;
 	END
+
+	---------------------------------------------------------------------------
+	-- 0b. Validate: duplicate GUIDs in staging
+	---------------------------------------------------------------------------
+	DECLARE @dupGUIDs int;
+
+	SELECT @dupGUIDs = COUNT(*)
+	FROM (
+		SELECT [GUID]
+		FROM [staging].[DisplayToID]
+		GROUP BY [GUID]
+		HAVING COUNT(*) > 1
+	) x;
+
+	IF @dupGUIDs > 0
+	BEGIN
+		SET @msg = CONCAT('ERROR: ', @dupGUIDs,
+			' duplicate GUID(s) in staging.DisplayToID. ',
+			'Truncate staging and re-import.');
+		RAISERROR('%s', 16, 1, @msg);
+		RETURN 1;
+	END
+
+	---------------------------------------------------------------------------
+	-- 0c. Validate: duplicate rows within staging.CounterData
+	---------------------------------------------------------------------------
+	DECLARE @dupRows bigint;
+
+	SELECT @dupRows = COUNT(*)
+	FROM (
+		SELECT [CounterDateTime], [CounterID], [GUID]
+		FROM [staging].[CounterData] sd
+		WHERE EXISTS (
+			SELECT 1 FROM @NewGUIDs ng WHERE ng.[GUID] = sd.[GUID]
+		)
+		GROUP BY [CounterDateTime], [CounterID], [GUID]
+		HAVING COUNT(*) > 1
+	) x;
+
+	IF @dupRows > 0
+	BEGIN
+		SET @msg = CONCAT('ERROR: ', @dupRows,
+			' duplicate (CounterDateTime, CounterID, GUID) groups ',
+			'in staging.CounterData. Truncate staging and re-import.');
+		RAISERROR('%s', 16, 1, @msg);
+		RETURN 1;
+	END
+
+	---------------------------------------------------------------------------
+	-- 0d. Validate: time range overlap with vault
+	--     Uses segment elimination on ordered CCI — very fast
+	---------------------------------------------------------------------------
+	DECLARE @stgMinDT datetime, @stgMaxDT datetime;
+
+	SELECT
+		@stgMinDT = MIN(CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121)),
+		@stgMaxDT = MAX(CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121))
+	FROM [staging].[CounterData] sd
+	JOIN @NewGUIDs ng ON ng.[GUID] = sd.[GUID];
+
+	SET @msg = CONCAT('Staging time range: ',
+		CONVERT(varchar, @stgMinDT, 120), ' to ',
+		CONVERT(varchar, @stgMaxDT, 120));
+	RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
+
+	DECLARE @overlapTier varchar(20) = NULL;
+
+	IF EXISTS (
+		SELECT 1 FROM [vault].[CounterData_Tier1]
+		WHERE [CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+	)
+		SET @overlapTier = 'Tier1';
+	ELSE IF EXISTS (
+		SELECT 1 FROM [vault].[CounterData_Tier2]
+		WHERE [CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+	)
+		SET @overlapTier = 'Tier2';
+	ELSE IF EXISTS (
+		SELECT 1 FROM [vault].[CounterData_Tier3]
+		WHERE [CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+	)
+		SET @overlapTier = 'Tier3';
+
+	IF @overlapTier IS NOT NULL
+	BEGIN
+		SET @msg = CONCAT('ERROR: Staging time range [',
+			CONVERT(varchar, @stgMinDT, 120), ' - ',
+			CONVERT(varchar, @stgMaxDT, 120),
+			'] overlaps with existing vault data (first found in ',
+			@overlapTier, '). ',
+			'Investigate before loading.');
+		RAISERROR('%s', 16, 1, @msg);
+		RETURN 1;
+	END
+
+	RAISERROR('Validation passed.', 0, 1) WITH NOWAIT;
 
 	---------------------------------------------------------------------------
 	-- 1. Merge counter definitions
@@ -104,8 +199,6 @@ BEGIN
 	SET @rows = @@ROWCOUNT;
 	SET @msg = CONCAT('New counter definitions added: ', @rows);
 	RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
-
-	IF @LoadOnlyCounters = 1 RETURN;
 
 	---------------------------------------------------------------------------
 	-- 2. Prepare tier resolution into a temp table for performance
@@ -238,8 +331,8 @@ BEGIN
 	JOIN	#TierMap tm		ON tm.[VaultCounterID] = cm.[VaultCounterID]
 	WHERE	tm.[Tier] = 3
 	ORDER BY
-		CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121)
-	,	cm.[VaultCounterID]
+		cm.[VaultCounterID]
+	,	CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121)
 	OPTION (MAXDOP 1);
 
 	SET @rows = @@ROWCOUNT;
@@ -293,4 +386,3 @@ BEGIN
 	RETURN 0;
 END
 GO
-

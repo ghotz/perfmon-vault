@@ -87,7 +87,8 @@ CREATE TABLE			[vault].[CounterData_Tier3]
 --	UNIQUE		([CounterID], [CounterDateTime])
 
 ,	INDEX CCI_CounterData_Tier3
-	CLUSTERED COLUMNSTORE ORDER (CounterDateTime, CounterID)
+	CLUSTERED COLUMNSTORE ORDER (CounterID, CounterDateTime) -- inverted key, validated by tests
+    WITH (DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
 )
 ON [ps_CounterData_Yearly] ([CounterDateTime]);
 ;
