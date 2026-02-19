@@ -1,7 +1,7 @@
 :setvar DatabaseName "PerfmonVault"
 USE [$(DatabaseName)];
 GO
---exec sp_whoisactive
+
 -------------------------------------------------------------------------------
 -- Columnstore Rowgroup Health Dashboard
 -------------------------------------------------------------------------------
@@ -18,7 +18,7 @@ GO
 	,	total_rows - deleted_rows AS live_rows
 	,	size_in_bytes
 	,	trim_reason_desc
-	,	CAST(total_rows * 100.0 / 1048576 AS decimal(5,1)) AS fill_pct
+	,	CAST(total_rows * 100.0 / CAST(1048576 as bigint) AS decimal(5,1)) AS fill_pct
 	,	PERCENT_RANK() OVER (
 			PARTITION BY object_id
 			ORDER BY total_rows
@@ -61,11 +61,11 @@ SELECT
 
 	-- Overall fill efficiency (vs perfect 1M per RG)
 ,	CAST(AVG(fill_pct) AS decimal(5,1))								AS avg_fill_pct
-,	CAST(SUM(live_rows) * 100.0 / (COUNT(*) * 1048576) AS decimal(5,1))	AS overall_efficiency_pct
+,	CAST(SUM(live_rows) * 100.0 / (COUNT(*) * 1048576.) AS decimal(5,1))	AS overall_efficiency_pct
 
 	-- Space
-,	FORMAT(SUM(size_in_bytes) / 1048576, 'N0')						AS total_size_mb
-,	CAST(AVG(size_in_bytes * 1.0) / 1048576 AS decimal(8,2))		AS avg_rg_size_mb
+,	FORMAT(SUM(size_in_bytes) / 1048576., 'N0')						AS total_size_mb
+,	CAST(AVG(size_in_bytes * 1.0) / 1048576. AS decimal(8,2))		AS avg_rg_size_mb
 
 	-- Deleted rows (soft deletes from rebalance/updates)
 ,	SUM(deleted_rows)												AS total_deleted
@@ -105,7 +105,7 @@ SELECT
 ,	CAST(AVG(total_rows * 1.0) AS int)								AS avg_rows
 ,	MIN(total_rows)													AS min_rows
 ,	SUM(deleted_rows)												AS deleted_rows
-,	FORMAT(SUM(size_in_bytes) / 1048576, 'N0')						AS size_mb
+,	FORMAT(SUM(size_in_bytes) / 1048576., 'N0')						AS size_mb
 FROM	sys.dm_db_column_store_row_group_physical_stats
 WHERE	object_id IN (
 	OBJECT_ID('vault.CounterData_Tier1'),
@@ -115,4 +115,59 @@ WHERE	object_id IN (
 AND		state = 3
 GROUP BY object_id, partition_number
 ORDER BY 1, partition_number;
+GO
+
+-- 4. Dictionary health per column
+;WITH Dicts AS (
+	SELECT
+		OBJECT_SCHEMA_NAME(p.object_id) + '.' + OBJECT_NAME(p.object_id) AS [table]
+	,	c.name AS column_name
+	,	d.on_disk_size
+	,	d.entry_count
+	,	d.type AS dict_type
+	FROM	sys.column_store_dictionaries d
+	JOIN	sys.partitions p ON d.hobt_id = p.hobt_id
+	JOIN	sys.columns c ON d.column_id = c.column_id AND c.object_id = p.object_id
+	WHERE	p.object_id IN (
+		OBJECT_ID('vault.CounterData_Tier1'),
+		OBJECT_ID('vault.CounterData_Tier2'),
+		OBJECT_ID('vault.CounterData_Tier3')
+	)
+)
+SELECT
+	[table]
+,	column_name
+,	COUNT(*)														AS num_dicts
+,	SUM(CASE WHEN on_disk_size > 10 * 1024 * 1024 THEN 1 ELSE 0 END)	AS big_dicts_10mb
+,	SUM(CASE WHEN on_disk_size >  5 * 1024 * 1024 THEN 1 ELSE 0 END)	AS big_dicts_5mb
+,	MAX(on_disk_size) / 1024 / 1024									AS max_dict_mb
+,	CAST(AVG(on_disk_size * 1.0) / 1024 AS int)					AS avg_dict_kb
+,	MAX(entry_count)												AS max_entries
+,	CAST(AVG(entry_count * 1.0) AS int)								AS avg_entries
+,	FORMAT(SUM(on_disk_size) / 1048576, 'N0')						AS total_dict_mb
+FROM	Dicts
+GROUP BY [table], column_name
+HAVING	MAX(on_disk_size) > 100 * 1024	-- only show columns with dicts > 100KB
+ORDER BY [table], MAX(on_disk_size) DESC;
+GO
+
+-- 5. Potential dictionary pressure: columns approaching 16MB limit
+SELECT
+	OBJECT_SCHEMA_NAME(p.object_id) + '.' + OBJECT_NAME(p.object_id) AS [table]
+,	c.name AS column_name
+,	d.on_disk_size / 1024 / 1024									AS dict_mb
+,	CAST(d.on_disk_size * 100.0 / (16 * 1024 * 1024) AS decimal(5,1))	AS pct_of_limit
+,	d.entry_count
+,	p.partition_number
+,	d.type															AS dict_type
+FROM	sys.column_store_dictionaries d
+JOIN	sys.partitions p ON d.hobt_id = p.hobt_id
+JOIN	sys.columns c ON d.column_id = c.column_id AND c.object_id = p.object_id
+WHERE	p.object_id IN (
+	OBJECT_ID('vault.CounterData_Tier1'),
+	OBJECT_ID('vault.CounterData_Tier2'),
+	OBJECT_ID('vault.CounterData_Tier3')
+)
+AND		d.on_disk_size > 5 * 1024 * 1024	-- only dicts > 5MB (approaching danger zone)
+ORDER BY d.on_disk_size DESC;
 GO

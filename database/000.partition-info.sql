@@ -1,7 +1,8 @@
 :setvar DatabaseName "PerfmonVault"
 USE [$(DatabaseName)];
 GO
-
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+GO
 -------------------------------------------------------------------------------
 -- Partition ranges, compression, and data distribution
 -------------------------------------------------------------------------------
@@ -68,7 +69,7 @@ LEFT JOIN ActualRanges ar
 	AND	ar.pn = p.partition_number
 
 WHERE	p.object_id IN (
-	OBJECT_ID('vault.CounterData_Tier1'),
+	OBJECT_ID('vault.Count3erData_Tier1'),
 	OBJECT_ID('vault.CounterData_Tier2'),
 	OBJECT_ID('vault.CounterData_Tier3')
 )
@@ -84,15 +85,19 @@ ORDER BY 1, p.partition_number;
 GO
 
 --ALTER INDEX CCI_CounterData_Tier1 ON vault.CounterData_Tier1
---REORGANIZE PARTITION = 3
+--REORGANIZE PARTITION = 1
 --ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
---REORGANIZE PARTITION = 2
+--REORGANIZE PARTITION = 1
 --ALTER INDEX CCI_CounterData_Tier3 ON vault.CounterData_Tier3
---REORGANIZE PARTITION = 2
+--REORGANIZE PARTITION = 1
+
+--ALTER INDEX CCI_CounterData_Tier1 ON vault.CounterData_Tier1 REORGANIZE WITH (COMPRESS_ALL_ROW_GROUPS=ON);
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2 REORGANIZE WITH (COMPRESS_ALL_ROW_GROUPS=ON);
+--ALTER INDEX CCI_CounterData_Tier3 ON vault.CounterData_Tier3 REORGANIZE WITH (COMPRESS_ALL_ROW_GROUPS=ON);
 
 --ALTER INDEX CCI_CounterData_Tier1 ON vault.CounterData_Tier1
---REBUILD PARTITION = 11  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE)
+--REBUILD PARTITION = 1  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE)
 --ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
---REBUILD PARTITION = 2  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE)
+--REBUILD PARTITION = 1  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE)
 --ALTER INDEX CCI_CounterData_Tier3 ON vault.CounterData_Tier3
---REBUILD PARTITION = 3 WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+--REBUILD PARTITION = 1 WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)

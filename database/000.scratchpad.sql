@@ -12,10 +12,10 @@ INTO	#tmp_keys
 FROM	[$(SourceDatabaseName)].[dbo].[CounterDetails];
 ALTER TABLE #tmp_keys ADD PRIMARY KEY ([CounterID]);
 
-WHILE NOT EXISTS(
+WHILE EXISTS(
 	SELECT	*
-	FROM	[vault].[DisplayToID]
-	WHERE	[GUID] NOT IN (SELECT [GUID] FROM [$(SourceDatabaseName)].[dbo].[DisplayToID])
+	FROM	[$(SourceDatabaseName)].[dbo].[DisplayToID]
+	WHERE	[GUID] NOT IN (SELECT [GUID] FROM [vault].[DisplayToID])
 )
 BEGIN
 	TRUNCATE TABLE [staging].[DisplayToID];
