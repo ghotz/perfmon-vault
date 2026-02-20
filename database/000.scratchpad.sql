@@ -3,6 +3,9 @@
 USE [$(DatabaseName)];
 GO
 
+--SELECT	MIN([CounterDateTime]), MAX([CounterDateTime])
+--FROM		[].[dbo].[CounterData]
+
 -- duplicate keys
 DROP TABLE IF EXISTS #tmp_keys
 SELECT
@@ -46,7 +49,7 @@ BEGIN
 	INSERT	[staging].[CounterData]
 			([GUID], [CounterID], [RecordIndex], [CounterDateTime], [CounterValue], [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB], [MultiCount])
 	SELECT	D.[GUID], k.CounterID_min AS [CounterID], [RecordIndex], [CounterDateTime], [CounterValue], [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB], [MultiCount]
-	FROM	[$(SourceDatabaseName)].[dbo].[CounterData_Full] AS D
+	FROM	[$(SourceDatabaseName)].[dbo].[CounterData] AS D
 	JOIN	[staging].[DisplayToID] AS I
 	  ON	D.[GUID] = I.[GUID]
 	JOIN	#tmp_keys AS K
@@ -55,9 +58,6 @@ BEGIN
 	EXEC [vault].[usp_LoadFromStaging] 1
 END
 GO
-
-
--- EXEC [vault].[usp_LoadFromStaging] 1
 
 --TRUNCATE TABLE [staging].[CounterData]
 --TRUNCATE TABLE [staging].[DisplayToID]

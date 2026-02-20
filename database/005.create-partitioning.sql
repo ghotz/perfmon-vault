@@ -1,6 +1,6 @@
 :setvar DatabaseName "PerfmonVault"
-:setvar StartYear "2019"
-:setvar NumYears "10"
+:setvar StartYear "2024"
+:setvar NumYears "2"
 :setvar FilegroupName "VAULT"
 USE [$(DatabaseName)];
 GO

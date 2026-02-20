@@ -1,0 +1,10 @@
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\001.create-database.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\002.create-schemas.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\003.create-staging-tables.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\004.create-synonyms.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\005.create-partitioning.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\006.create-vault-tables.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\007.create-vault-tiers-views.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\008.configure-default-tiers.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\009.create-vault-procedures.sql
+:r C:\Users\gianl\repos\personal\perfmon-vault\database\010.create-rebalance-procedure.sql

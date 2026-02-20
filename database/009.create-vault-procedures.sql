@@ -8,16 +8,23 @@ GO
 -- Loads data from [staging] into [vault] with tier-based routing:
 --   1. Identifies new BLGs (by GUID) not yet in vault
 --   2. Merges new counter definitions into vault.CounterDetails
---   3. Inserts counter data into T1/T2/T3 based on CounterTier patterns
+--   3. Inserts counter data into Tier1/Tier2/Tier3 based on CounterTier patterns
 --   4. Marks BLGs as loaded in vault.DisplayToID
 --   5. Optionally truncates staging
+--
+-- Parameters:
+--   @TruncateStaging  = 1 : truncate staging tables after successful load
+--   @SkipValidation   = 1 : skip duplicate checks (0b, 3b) for faster loads
+--   @LoadOnlyCounters = 1 : merge CounterDetails only, skip data load
 --
 -- char(24) → datetime: LEFT(,23) strips the null terminator from relog
 -- CounterID remapping: staging.CounterID → vault.CounterID via business key
 -- Tier resolution: vault.vCounterTierResolved (lowest matching tier wins)
 -------------------------------------------------------------------------------
 CREATE OR ALTER PROCEDURE [vault].[usp_LoadFromStaging]
-	@TruncateStaging bit = 0
+	@TruncateStaging  bit = 0
+,	@SkipValidation   bit = 0
+,	@LoadOnlyCounters bit = 0
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -54,60 +61,39 @@ BEGIN
 	---------------------------------------------------------------------------
 	-- 0b. Validate: duplicate GUIDs in staging
 	---------------------------------------------------------------------------
-	DECLARE @dupGUIDs int;
-
-	SELECT @dupGUIDs = COUNT(*)
-	FROM (
-		SELECT [GUID]
-		FROM [staging].[DisplayToID]
-		GROUP BY [GUID]
-		HAVING COUNT(*) > 1
-	) x;
-
-	IF @dupGUIDs > 0
+	IF @SkipValidation = 0
 	BEGIN
-		SET @msg = CONCAT('ERROR: ', @dupGUIDs,
-			' duplicate GUID(s) in staging.DisplayToID. ',
-			'Truncate staging and re-import.');
-		RAISERROR('%s', 16, 1, @msg);
-		RETURN 1;
+		DECLARE @dupGUIDs int;
+
+		SELECT @dupGUIDs = COUNT(*)
+		FROM (
+			SELECT [GUID]
+			FROM [staging].[DisplayToID]
+			GROUP BY [GUID]
+			HAVING COUNT(*) > 1
+		) x;
+
+		IF @dupGUIDs > 0
+		BEGIN
+			SET @msg = CONCAT('ERROR: ', @dupGUIDs,
+				' duplicate GUID(s) in staging.DisplayToID. ',
+				'Truncate staging and re-import.');
+			RAISERROR('%s', 16, 1, @msg);
+			RETURN 1;
+		END
 	END
+	ELSE
+		RAISERROR('Skipping validation (0b: duplicate GUIDs).', 0, 1) WITH NOWAIT;
 
 	---------------------------------------------------------------------------
-	-- 0c. Validate: duplicate rows within staging.CounterData
-	---------------------------------------------------------------------------
-	DECLARE @dupRows bigint;
-
-	SELECT @dupRows = COUNT(*)
-	FROM (
-		SELECT [CounterDateTime], [CounterID], [GUID]
-		FROM [staging].[CounterData] sd
-		WHERE EXISTS (
-			SELECT 1 FROM @NewGUIDs ng WHERE ng.[GUID] = sd.[GUID]
-		)
-		GROUP BY [CounterDateTime], [CounterID], [GUID]
-		HAVING COUNT(*) > 1
-	) x;
-
-	IF @dupRows > 0
-	BEGIN
-		SET @msg = CONCAT('ERROR: ', @dupRows,
-			' duplicate (CounterDateTime, CounterID, GUID) groups ',
-			'in staging.CounterData. Truncate staging and re-import.');
-		RAISERROR('%s', 16, 1, @msg);
-		RETURN 1;
-	END
-
-	---------------------------------------------------------------------------
-	-- 0d. Validate: time range overlap with vault
-	--     Uses segment elimination on ordered CCI — very fast
+	-- 0c. Log staging time range (from DisplayToID — instant)
 	---------------------------------------------------------------------------
 	DECLARE @stgMinDT datetime, @stgMaxDT datetime;
 
 	SELECT
-		@stgMinDT = MIN(CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121)),
-		@stgMaxDT = MAX(CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121))
-	FROM [staging].[CounterData] sd
+		@stgMinDT = MIN(sd.[LogStartTime]),
+		@stgMaxDT = MAX(sd.[LogStopTime])
+	FROM [staging].[DisplayToID] sd
 	JOIN @NewGUIDs ng ON ng.[GUID] = sd.[GUID];
 
 	SET @msg = CONCAT('Staging time range: ',
@@ -115,37 +101,7 @@ BEGIN
 		CONVERT(varchar, @stgMaxDT, 120));
 	RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
-	DECLARE @overlapTier varchar(20) = NULL;
-
-	IF EXISTS (
-		SELECT 1 FROM [vault].[CounterData_Tier1]
-		WHERE [CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
-	)
-		SET @overlapTier = 'Tier1';
-	ELSE IF EXISTS (
-		SELECT 1 FROM [vault].[CounterData_Tier2]
-		WHERE [CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
-	)
-		SET @overlapTier = 'Tier2';
-	ELSE IF EXISTS (
-		SELECT 1 FROM [vault].[CounterData_Tier3]
-		WHERE [CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
-	)
-		SET @overlapTier = 'Tier3';
-
-	IF @overlapTier IS NOT NULL
-	BEGIN
-		SET @msg = CONCAT('ERROR: Staging time range [',
-			CONVERT(varchar, @stgMinDT, 120), ' - ',
-			CONVERT(varchar, @stgMaxDT, 120),
-			'] overlaps with existing vault data (first found in ',
-			@overlapTier, '). ',
-			'Investigate before loading.');
-		RAISERROR('%s', 16, 1, @msg);
-		RETURN 1;
-	END
-
-	RAISERROR('Validation passed.', 0, 1) WITH NOWAIT;
+	RAISERROR('Validation passed (pre-merge).', 0, 1) WITH NOWAIT;
 
 	---------------------------------------------------------------------------
 	-- 1. Merge counter definitions
@@ -200,6 +156,12 @@ BEGIN
 	SET @msg = CONCAT('New counter definitions added: ', @rows);
 	RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
+	IF @LoadOnlyCounters = 1
+	BEGIN
+		RAISERROR('LoadOnlyCounters=1. Counter merge complete, skipping data load.', 0, 1) WITH NOWAIT;
+		RETURN 0;
+	END
+
 	---------------------------------------------------------------------------
 	-- 2. Prepare tier resolution into a temp table for performance
 	--    (avoids re-evaluating the LIKE patterns per row)
@@ -233,6 +195,94 @@ BEGIN
 		AND	ISNULL(vc.[ParentObjectID],		-1)	= ISNULL(sc.[ParentObjectID],	-1);
 
 	CREATE UNIQUE CLUSTERED INDEX uci_CounterMap ON #CounterMap ([StagingCounterID]);
+
+	---------------------------------------------------------------------------
+	-- 3b. Validate: duplicate counters against vault
+	--     Lightweight approach: check if vault already has data for any of
+	--     the staging CounterIDs in the staging time range.
+	--     Only ~3600 distinct IDs to probe — no materializing millions of keys.
+	--     New machines → new CounterIDs → zero match → instant.
+	--     T1/T2: segment elimination on CounterDateTime (CCI leading col)
+	--     T3:    segment elimination on CounterID (CCI leading col)
+	---------------------------------------------------------------------------
+	IF @SkipValidation = 0
+	BEGIN
+		RAISERROR('Checking for duplicates against vault...', 0, 1) WITH NOWAIT;
+
+		DROP TABLE IF EXISTS #StagingCounters;
+
+		SELECT DISTINCT cm.[VaultCounterID], tm.[Tier]
+		INTO #StagingCounters
+		FROM #CounterMap cm
+		JOIN #TierMap tm ON tm.[VaultCounterID] = cm.[VaultCounterID]
+		WHERE tm.[Tier] IN (1, 2, 3);
+
+		CREATE CLUSTERED INDEX ci_StagingCounters ON #StagingCounters ([Tier], [VaultCounterID]);
+
+		SET @msg = CONCAT('Staging counters to check: ', @@ROWCOUNT);
+		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
+
+		DECLARE @dupTier varchar(20) = NULL;
+
+		-- Tier 1: CCI = (CounterDateTime, CounterID) → BETWEEN gives seg elimination
+		IF EXISTS (
+			SELECT 1
+			FROM [vault].[CounterData_Tier1] v
+			WHERE v.[CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+			AND   v.[CounterID] IN (SELECT sc.[VaultCounterID] FROM #StagingCounters sc WHERE sc.[Tier] = 1)
+		)
+			SET @dupTier = 'Tier1';
+
+		-- Tier 2: CCI = (CounterDateTime, CounterID) → same
+		IF @dupTier IS NULL AND EXISTS (
+			SELECT 1
+			FROM [vault].[CounterData_Tier2] v
+			WHERE v.[CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+			AND   v.[CounterID] IN (SELECT sc.[VaultCounterID] FROM #StagingCounters sc WHERE sc.[Tier] = 2)
+		)
+			SET @dupTier = 'Tier2';
+
+		-- Tier 3: CCI = (CounterID, CounterDateTime) → CounterID IN gives seg elimination
+		IF @dupTier IS NULL AND EXISTS (
+			SELECT 1
+			FROM [vault].[CounterData_Tier3] v
+			WHERE v.[CounterID] IN (SELECT sc.[VaultCounterID] FROM #StagingCounters sc WHERE sc.[Tier] = 3)
+			AND   v.[CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+		)
+			SET @dupTier = 'Tier3';
+
+		IF @dupTier IS NOT NULL
+		BEGIN
+			SET @msg = CONCAT('ERROR: Vault already contains data for staging counters ',
+				'in range [', CONVERT(varchar, @stgMinDT, 120), ' - ',
+				CONVERT(varchar, @stgMaxDT, 120), ']. ',
+				'First overlap found in ', @dupTier, '. Investigate before loading.');
+			RAISERROR('%s', 16, 1, @msg);
+
+			-- Show which counters overlap (from vault, not staging — fast)
+			SELECT TOP (20)
+				cd.[CounterID], cd.[MachineName], cd.[ObjectName]
+			,	cd.[CounterName], cd.[InstanceName]
+			,	MIN(v.[CounterDateTime]) AS [vault_min_dt]
+			,	MAX(v.[CounterDateTime]) AS [vault_max_dt]
+			,	COUNT(*) AS [vault_rows_in_range]
+			FROM [vault].[CounterData] v   -- unified view
+			JOIN #StagingCounters sc ON sc.[VaultCounterID] = v.[CounterID]
+			JOIN [vault].[CounterDetails] cd ON cd.[CounterID] = v.[CounterID]
+			WHERE v.[CounterDateTime] BETWEEN @stgMinDT AND @stgMaxDT
+			GROUP BY cd.[CounterID], cd.[MachineName], cd.[ObjectName]
+			,	cd.[CounterName], cd.[InstanceName]
+			ORDER BY [vault_rows_in_range] DESC;
+
+			RETURN 1;
+		END
+
+		DROP TABLE IF EXISTS #StagingCounters;
+
+		RAISERROR('No duplicates found. Proceeding with load.', 0, 1) WITH NOWAIT;
+	END
+	ELSE
+		RAISERROR('Skipping validation (3b: vault duplicates).', 0, 1) WITH NOWAIT;
 
 	---------------------------------------------------------------------------
 	-- 4. Insert counter data — Tier 1
@@ -331,8 +381,8 @@ BEGIN
 	JOIN	#TierMap tm		ON tm.[VaultCounterID] = cm.[VaultCounterID]
 	WHERE	tm.[Tier] = 3
 	ORDER BY
-		cm.[VaultCounterID]
-	,	CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121)
+		CONVERT(datetime, LEFT(sd.[CounterDateTime], 23), 121)
+	,	cm.[VaultCounterID]
 	OPTION (MAXDOP 1);
 
 	SET @rows = @@ROWCOUNT;
