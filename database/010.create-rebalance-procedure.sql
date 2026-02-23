@@ -46,11 +46,11 @@ BEGIN
 	DROP TABLE IF EXISTS #Misplaced;
 
 	;WITH CurrentPlacement AS (
-		SELECT [CounterID], 1 AS [CurrentTier] FROM [vault].[CounterData_T1] GROUP BY [CounterID]
+		SELECT [CounterID], 1 AS [CurrentTier] FROM [vault].[CounterData_Tier1] GROUP BY [CounterID]
 		UNION ALL
-		SELECT [CounterID], 2 AS [CurrentTier] FROM [vault].[CounterData_T2] GROUP BY [CounterID]
+		SELECT [CounterID], 2 AS [CurrentTier] FROM [vault].[CounterData_Tier2] GROUP BY [CounterID]
 		UNION ALL
-		SELECT [CounterID], 3 AS [CurrentTier] FROM [vault].[CounterData_T3] GROUP BY [CounterID]
+		SELECT [CounterID], 3 AS [CurrentTier] FROM [vault].[CounterData_Tier3] GROUP BY [CounterID]
 	)
 	SELECT
 		cp.[CounterID]
@@ -84,11 +84,11 @@ BEGIN
 	FROM	#Misplaced m
 	CROSS APPLY (
 		SELECT COUNT_BIG(*) AS [NumRows]
-		FROM [vault].[CounterData_T1] WHERE [CounterID] = m.[CounterID] AND m.[CurrentTier] = 1
+		FROM [vault].[CounterData_Tier1] WHERE [CounterID] = m.[CounterID] AND m.[CurrentTier] = 1
 		UNION ALL
-		SELECT COUNT_BIG(*) FROM [vault].[CounterData_T2] WHERE [CounterID] = m.[CounterID] AND m.[CurrentTier] = 2
+		SELECT COUNT_BIG(*) FROM [vault].[CounterData_Tier2] WHERE [CounterID] = m.[CounterID] AND m.[CurrentTier] = 2
 		UNION ALL
-		SELECT COUNT_BIG(*) FROM [vault].[CounterData_T3] WHERE [CounterID] = m.[CounterID] AND m.[CurrentTier] = 3
+		SELECT COUNT_BIG(*) FROM [vault].[CounterData_Tier3] WHERE [CounterID] = m.[CounterID] AND m.[CurrentTier] = 3
 	) cnt
 	GROUP BY m.[CurrentTier], m.[TargetTier]
 	ORDER BY m.[CurrentTier], m.[TargetTier];
@@ -119,7 +119,7 @@ BEGIN
 	BEGIN
 		RAISERROR('Moving T1 → T2...', 0, 1) WITH NOWAIT;
 
-		INSERT INTO [vault].[CounterData_T2] WITH (TABLOCKX)
+		INSERT INTO [vault].[CounterData_Tier2] WITH (TABLOCKX)
 		([CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 		 [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 		 [MultiCount], [GUID])
@@ -127,7 +127,7 @@ BEGIN
 			[CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 			[FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 			[MultiCount], [GUID]
-		FROM	[vault].[CounterData_T1] src
+		FROM	[vault].[CounterData_Tier1] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -141,7 +141,7 @@ BEGIN
 		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
 		DELETE src
-		FROM	[vault].[CounterData_T1] src
+		FROM	[vault].[CounterData_Tier1] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -159,7 +159,7 @@ BEGIN
 	BEGIN
 		RAISERROR('Moving T1 → T3...', 0, 1) WITH NOWAIT;
 
-		INSERT INTO [vault].[CounterData_T3] WITH (TABLOCKX)
+		INSERT INTO [vault].[CounterData_Tier3] WITH (TABLOCKX)
 		([CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 		 [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 		 [MultiCount], [GUID])
@@ -167,7 +167,7 @@ BEGIN
 			[CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 			[FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 			[MultiCount], [GUID]
-		FROM	[vault].[CounterData_T1] src
+		FROM	[vault].[CounterData_Tier1] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -181,7 +181,7 @@ BEGIN
 		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
 		DELETE src
-		FROM	[vault].[CounterData_T1] src
+		FROM	[vault].[CounterData_Tier1] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -199,7 +199,7 @@ BEGIN
 	BEGIN
 		RAISERROR('Moving T2 → T1...', 0, 1) WITH NOWAIT;
 
-		INSERT INTO [vault].[CounterData_T1] WITH (TABLOCKX)
+		INSERT INTO [vault].[CounterData_Tier1] WITH (TABLOCKX)
 		([CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 		 [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 		 [MultiCount], [GUID])
@@ -207,7 +207,7 @@ BEGIN
 			[CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 			[FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 			[MultiCount], [GUID]
-		FROM	[vault].[CounterData_T2] src
+		FROM	[vault].[CounterData_Tier2] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -221,7 +221,7 @@ BEGIN
 		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
 		DELETE src
-		FROM	[vault].[CounterData_T2] src
+		FROM	[vault].[CounterData_Tier2] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -239,7 +239,7 @@ BEGIN
 	BEGIN
 		RAISERROR('Moving T2 → T3...', 0, 1) WITH NOWAIT;
 
-		INSERT INTO [vault].[CounterData_T3] WITH (TABLOCKX)
+		INSERT INTO [vault].[CounterData_Tier3] WITH (TABLOCKX)
 		([CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 		 [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 		 [MultiCount], [GUID])
@@ -247,7 +247,7 @@ BEGIN
 			[CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 			[FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 			[MultiCount], [GUID]
-		FROM	[vault].[CounterData_T2] src
+		FROM	[vault].[CounterData_Tier2] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -261,7 +261,7 @@ BEGIN
 		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
 		DELETE src
-		FROM	[vault].[CounterData_T2] src
+		FROM	[vault].[CounterData_Tier2] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -279,7 +279,7 @@ BEGIN
 	BEGIN
 		RAISERROR('Moving T3 → T1...', 0, 1) WITH NOWAIT;
 
-		INSERT INTO [vault].[CounterData_T1] WITH (TABLOCKX)
+		INSERT INTO [vault].[CounterData_Tier1] WITH (TABLOCKX)
 		([CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 		 [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 		 [MultiCount], [GUID])
@@ -287,7 +287,7 @@ BEGIN
 			[CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 			[FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 			[MultiCount], [GUID]
-		FROM	[vault].[CounterData_T3] src
+		FROM	[vault].[CounterData_Tier3] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -301,7 +301,7 @@ BEGIN
 		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
 		DELETE src
-		FROM	[vault].[CounterData_T3] src
+		FROM	[vault].[CounterData_Tier3] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -319,7 +319,7 @@ BEGIN
 	BEGIN
 		RAISERROR('Moving T3 → T2...', 0, 1) WITH NOWAIT;
 
-		INSERT INTO [vault].[CounterData_T2] WITH (TABLOCKX)
+		INSERT INTO [vault].[CounterData_Tier2] WITH (TABLOCKX)
 		([CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 		 [FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 		 [MultiCount], [GUID])
@@ -327,7 +327,7 @@ BEGIN
 			[CounterDateTime], [CounterID], [RecordIndex], [CounterValue],
 			[FirstValueA], [FirstValueB], [SecondValueA], [SecondValueB],
 			[MultiCount], [GUID]
-		FROM	[vault].[CounterData_T3] src
+		FROM	[vault].[CounterData_Tier3] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -341,7 +341,7 @@ BEGIN
 		RAISERROR('%s', 0, 1, @msg) WITH NOWAIT;
 
 		DELETE src
-		FROM	[vault].[CounterData_T3] src
+		FROM	[vault].[CounterData_Tier3] src
 		WHERE	EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID]
@@ -360,21 +360,21 @@ BEGIN
 		RAISERROR('Purging Tier 0 (excluded) counters...', 0, 1) WITH NOWAIT;
 
 		DELETE src
-		FROM [vault].[CounterData_T1] src
+		FROM [vault].[CounterData_Tier1] src
 		WHERE EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID] AND m.[CurrentTier] = 1 AND m.[TargetTier] = 0
 		);
 
 		DELETE src
-		FROM [vault].[CounterData_T2] src
+		FROM [vault].[CounterData_Tier2] src
 		WHERE EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID] AND m.[CurrentTier] = 2 AND m.[TargetTier] = 0
 		);
 
 		DELETE src
-		FROM [vault].[CounterData_T3] src
+		FROM [vault].[CounterData_Tier3] src
 		WHERE EXISTS (
 			SELECT 1 FROM #Misplaced m
 			WHERE m.[CounterID] = src.[CounterID] AND m.[CurrentTier] = 3 AND m.[TargetTier] = 0
