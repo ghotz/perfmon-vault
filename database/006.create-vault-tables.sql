@@ -117,7 +117,7 @@ CREATE TABLE			[vault].[CounterDetails]
 
 ,	CONSTRAINT	ak_CounterDetails
 	UNIQUE		([MachineName], [ObjectName], [CounterName], [InstanceName], [InstanceIndex], [ParentName], [ParentObjectID])
-);
+) ON [VAULT];
 
 DROP TABLE IF EXISTS	[vault].[DisplayToID];
 CREATE TABLE			[vault].[DisplayToID]
@@ -136,7 +136,7 @@ CREATE TABLE			[vault].[DisplayToID]
 
 ,	CONSTRAINT	ak_DisplayToID_DisplayString	-- passing the filename, we try to avoid loading the same file multiple times
 	UNIQUE		([DisplayString])
-);
+) ON [VAULT];
 GO
 
 -------------------------------------------------------------------------------
@@ -160,5 +160,5 @@ CREATE TABLE [vault].[CounterTier]
 
 ,	CONSTRAINT	ck_CounterTier_Tier
 	CHECK		([Tier] IN (0, 1, 2, 3))
-);
+) ON [VAULT];
 GO

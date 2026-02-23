@@ -6,6 +6,32 @@ GO
 -------------------------------------------------------------------------------
 -- Partition ranges, compression, and data distribution
 -------------------------------------------------------------------------------
+DROP TABLE IF EXISTS #ActualRanges;
+SELECT
+	OBJECT_ID('vault.CounterData_Tier1') AS [object_id]
+,	$PARTITION.pf_CounterData_Yearly([CounterDateTime]) AS [pn]
+,	MIN([CounterDateTime]) AS [actual_min_dt]
+,	MAX([CounterDateTime]) AS [actual_max_dt]
+INTO	#ActualRanges
+FROM [vault].[CounterData_Tier1]
+GROUP BY $PARTITION.pf_CounterData_Yearly([CounterDateTime])
+UNION ALL
+SELECT
+	OBJECT_ID('vault.CounterData_Tier2')
+,	$PARTITION.pf_CounterData_Yearly([CounterDateTime])
+,	MIN([CounterDateTime])
+,	MAX([CounterDateTime])
+FROM [vault].[CounterData_Tier2]
+GROUP BY $PARTITION.pf_CounterData_Yearly([CounterDateTime])
+UNION ALL
+SELECT
+	OBJECT_ID('vault.CounterData_Tier3')
+,	$PARTITION.pf_CounterData_Yearly([CounterDateTime])
+,	MIN([CounterDateTime])
+,	MAX([CounterDateTime])
+FROM [vault].[CounterData_Tier3]
+GROUP BY $PARTITION.pf_CounterData_Yearly([CounterDateTime])
+
 ;WITH ActualRanges AS (
 	SELECT
 		OBJECT_ID('vault.CounterData_Tier1') AS [object_id]
@@ -64,12 +90,12 @@ LEFT JOIN sys.partition_range_values prv_right
 LEFT JOIN sys.partition_range_values prv_left
 	ON	prv_left.function_id = pf.function_id
 	AND	prv_left.boundary_id = p.partition_number - 1
-LEFT JOIN ActualRanges ar
+LEFT JOIN #ActualRanges ar
 	ON	ar.object_id = p.object_id
 	AND	ar.pn = p.partition_number
 
 WHERE	p.object_id IN (
-	OBJECT_ID('vault.Count3erData_Tier1'),
+	OBJECT_ID('vault.CounterData_Tier1'),
 	OBJECT_ID('vault.CounterData_Tier2'),
 	OBJECT_ID('vault.CounterData_Tier3')
 )
@@ -83,6 +109,10 @@ GROUP BY
 
 ORDER BY 1, p.partition_number;
 GO
+
+-------------------------------------------------------------------------------
+-- Common manual rebuild/reorg commands
+-------------------------------------------------------------------------------
 
 --ALTER INDEX CCI_CounterData_Tier1 ON vault.CounterData_Tier1 REORGANIZE PARTITION = 1
 --ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2 REORGANIZE PARTITION = 1
@@ -105,3 +135,16 @@ GO
 --REBUILD WITH (MAXDOP = 1) --, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE)
 --ALTER INDEX CCI_CounterData_Tier3 ON vault.CounterData_Tier3
 --REBUILD WITH (MAXDOP = 1) --, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
+--REBUILD PARTITION = 1  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
+--REBUILD PARTITION = 2  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
+--REBUILD PARTITION = 3  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
+--REBUILD PARTITION = 4  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
+--REBUILD PARTITION = 5  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)
+--ALTER INDEX CCI_CounterData_Tier2 ON vault.CounterData_Tier2
+--REBUILD PARTITION = 6  WITH (MAXDOP = 1, ONLINE = ON, SORT_IN_TEMPDB = ON, DATA_COMPRESSION = COLUMNSTORE_ARCHIVE)

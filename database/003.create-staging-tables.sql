@@ -18,7 +18,7 @@ CREATE TABLE	[staging].[CounterData] (
 ,	CONSTRAINT	pk_CounterData
 	PRIMARY KEY	([GUID], [CounterID], [RecordIndex])
 	WITH (DATA_COMPRESSION = PAGE)
-);
+) ON [STAGING];
 
 DROP TABLE IF EXISTS	[staging].[CounterDetails];
 CREATE TABLE	[staging].[CounterDetails](
@@ -38,7 +38,7 @@ CREATE TABLE	[staging].[CounterDetails](
 ,	CONSTRAINT	pk_CounterDetails
 	PRIMARY KEY	([CounterID])
 	WITH (DATA_COMPRESSION = PAGE)
-);
+) ON [STAGING];
 
 DROP TABLE IF EXISTS	[staging].[DisplayToID];
 CREATE TABLE	[staging].[DisplayToID](
@@ -57,5 +57,5 @@ CREATE TABLE	[staging].[DisplayToID](
 ,	CONSTRAINT	ak_DisplayToID	-- passing the filename, we try to avoid loading the same file multiple times
 	UNIQUE ([DisplayString])
 	WITH (DATA_COMPRESSION = PAGE)
-)
+) ON [STAGING];
 GO
