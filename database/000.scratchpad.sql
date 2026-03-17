@@ -194,7 +194,7 @@ GO
 -------------------------------------------------------------------------------
 -- Other general queries/commands
 -------------------------------------------------------------------------------
---BACKUP DATABASE [PerfmonVault] TO DISK = 'F:\Backups\SQL Server\PerfmonVault_telesan.bak' WITH INIT, CHECKSUM, COMPRESSION (ALGORITHM = ZSTD )
+--BACKUP DATABASE [PerfmonVault] TO DISK = 'F:\Backups\SQL Server\PerfmonVault.bak' WITH INIT, CHECKSUM, COMPRESSION (ALGORITHM = ZSTD )
 --exec sp_whoisactive --@get_plans = 1
 
 
